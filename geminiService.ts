@@ -1,28 +1,31 @@
+
 import { GoogleGenAI } from "@google/genai";
-import { CalculatedInventoryItem } from "../types";
+import { CalculatedInventoryItem } from "../types.ts";
 
 export const getActionStrategy = async (items: CalculatedInventoryItem[]): Promise<string> => {
-  // Inicializamos dentro de la función para mayor robustez
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) return "API Key no configurada. El análisis de IA está desactivado.";
+
+  const ai = new GoogleGenAI({ apiKey });
   
-  // Fix: changed 'reorderPoint' to 'puntoPedido' to match CalculatedInventoryItem type
-  const prompt = `Actúa como un experto en gestión de inventarios PDR. Analiza estos datos de ${items.length} productos. 
-  Genera un informe estratégico breve (máximo 150 palabras) en español que incluya:
-  1. Identificación de los 3 riesgos principales.
-  2. Recomendación táctica para los productos críticos.
-  3. Comentario sobre el aging del inventario.
+  const prompt = `Actúa como un experto consultor de cadena de suministro especializado en el modelo PDR (Punto de Pedido, Demanda y Reserva). 
+  Analiza los siguientes 10 productos de mi inventario que requieren mayor atención:
   
-  Datos a analizar: ${JSON.stringify(items.slice(0, 10).map(i => ({n: i.name, s: i.currentStock, r: i.puntoPedido, a: i.agingDays})))}`;
+  ${items.slice(0, 10).map(i => `- ${i.name} (SKU: ${i.id}): Stock actual ${i.currentStock}, Punto de Pedido ${Math.ceil(i.puntoPedido)}, Demanda Mensual ${Math.ceil(i.demandaMensual)}, Antigüedad ${i.agingDays} días.`).join('\n')}
+  
+  Genera un informe ejecutivo conciso (máximo 150 palabras) que:
+  1. Identifique los riesgos de quiebre de stock inminentes.
+  2. Detecte stock muerto (aging alto).
+  3. Sugiera una acción prioritaria para mejorar el flujo de caja.`;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    // Accessing .text property directly as per guidelines
-    return response.text || "No se pudo generar la estrategia en este momento.";
+    return response.text || "Análisis no disponible en este momento.";
   } catch (error) {
-    console.error("Gemini Error:", error);
-    return "Error al conectar con el motor de IA. Por favor, revisa tu conexión.";
+    console.error("Gemini API Error:", error);
+    return "No se pudo generar el análisis estratégico en este momento.";
   }
 };
