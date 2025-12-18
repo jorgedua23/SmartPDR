@@ -3,11 +3,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 
-const rootElement = document.getElementById('root');
+const mountApp = () => {
+  const rootElement = document.getElementById('root');
+  if (!rootElement) return;
 
-if (!rootElement) {
-  console.error("Critical: Could not find root element to mount the app.");
-} else {
   try {
     const root = ReactDOM.createRoot(rootElement);
     root.render(
@@ -15,8 +14,13 @@ if (!rootElement) {
         <App />
       </React.StrictMode>
     );
-    console.log("SmartPDR: Application successfully mounted.");
   } catch (error) {
-    console.error("SmartPDR: Error during mounting:", error);
+    console.error("Error mounting React:", error);
   }
+};
+
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  mountApp();
+} else {
+  window.addEventListener('DOMContentLoaded', mountApp);
 }
