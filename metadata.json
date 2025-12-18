@@ -1,0 +1,5 @@
+{
+  "name": "Smart Inventory Optimizer (PDR)",
+  "description": "An intelligent inventory management system based on the PDR, featuring automated stock calculations, aging analysis, and AI-driven priority insights.",
+  "requestFramePermissions": []
+}
