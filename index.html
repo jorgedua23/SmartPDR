@@ -22,6 +22,7 @@
             justify-content: center;
             background: #ffffff;
             z-index: 9999;
+            transition: opacity 0.5s ease;
         }
         .spinner {
             width: 40px;
@@ -32,16 +33,15 @@
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .error-box { padding: 30px; color: #ef4444; text-align: center; max-width: 400px; }
-        .error-box b { display: block; margin-bottom: 10px; font-size: 18px; }
+        .error-box { padding: 30px; color: #ef4444; text-align: center; max-width: 400px; font-family: sans-serif; }
+        .error-box b { display: block; margin-bottom: 10px; font-size: 18px; color: #1e293b; }
+        .error-details { font-size: 12px; color: #64748b; background: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 15px; text-align: left; overflow-wrap: break-word; }
     </style>
 
     <script>
-        // Configuración global necesaria
         window.process = { env: { API_KEY: "" } };
     </script>
 
-    <!-- Polyfill para asegurar compatibilidad de importmaps en versiones antiguas de Safari -->
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.10.1/dist/es-module-shims.js"></script>
 
     <script type="importmap">
@@ -62,7 +62,7 @@
 </head>
 <body>
     <div id="loading-screen">
-        <div id="status-container">
+        <div id="status-container" style="display: flex; flex-direction: column; align-items: center;">
             <div class="spinner"></div>
             <p style="margin-top: 20px; color: #64748b; font-weight: 600; font-size: 14px;">Iniciando SmartPDR...</p>
         </div>
@@ -73,39 +73,39 @@
     <script type="module">
         const container = document.getElementById('status-container');
         
-        window.onerror = function(msg, url, line) {
-            console.error("Error detectado:", msg, "en", url, ":", line);
+        window.onerror = function(msg, url, line, col, error) {
+            console.error("Fallo detectado:", msg, "en", url);
             container.innerHTML = `
                 <div class="error-box">
-                    <b>Error de Aplicación</b>
-                    <p style="font-size: 13px; color: #64748b;">${msg}</p>
-                    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #4f46e5; color: white; border-radius: 10px; font-weight: 600;">Reintentar</button>
+                    <b>Fallo al cargar la aplicación</b>
+                    <p style="font-size: 14px;">Safari ha detectado un error técnico en los archivos del sistema.</p>
+                    <div class="error-details">
+                        ${msg}<br>
+                        <small>${url}:${line}</small>
+                    </div>
+                    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 24px; background: #4f46e5; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">Reintentar carga</button>
                 </div>`;
             return false;
         };
 
-        // Importación con manejo de errores para Safari
+        // Importación con captura de errores específica para módulos
         import('./index.tsx').catch(err => {
-            console.error("Error importando index.tsx:", err);
-            window.onerror(err.message);
+            console.error("Error en la importación de módulos:", err);
+            window.onerror("Error de Importación: " + err.message, "index.tsx", 0);
         });
         
         // Verificador de montaje
-        let attempts = 0;
-        const check = setInterval(() => {
-            attempts++;
+        let checkInterval = setInterval(() => {
             const root = document.getElementById('root');
             if (root && root.children.length > 0) {
                 const loader = document.getElementById('loading-screen');
-                if (loader) loader.style.opacity = '0';
-                setTimeout(() => { if (loader) loader.style.display = 'none'; }, 500);
-                clearInterval(check);
+                if (loader) {
+                    loader.style.opacity = '0';
+                    setTimeout(() => { loader.style.display = 'none'; }, 500);
+                }
+                clearInterval(checkInterval);
             }
-            if (attempts > 50) { // 10 segundos
-                console.warn("El montaje está tardando demasiado...");
-                clearInterval(check);
-            }
-        }, 200);
+        }, 100);
     </script>
 </body>
 </html>
