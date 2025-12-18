@@ -1,14 +1,14 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
 import { 
   LayoutDashboard, 
   Package, 
   RefreshCw, 
-  ChevronRight,
-  ClipboardList,
+  FileDown,
+  Trash2,
   Cpu,
   Upload,
   Search,
@@ -23,14 +23,15 @@ import {
   Copy,
   Check,
   AlertCircle,
-  Smartphone,
   Globe,
   Monitor,
   Filter,
-  Info
+  Info,
+  ClipboardList,
+  TrendingUp
 } from 'lucide-react';
 import { MOCK_DATA } from './constants';
-import { calculateInventoryMetrics, parseExcelInventory } from './services/inventoryService';
+import { calculateInventoryMetrics, parseExcelInventory, downloadTemplate } from './services/inventoryService';
 import { getActionStrategy } from './services/geminiService';
 import { CalculatedInventoryItem, PriorityLevel } from './types';
 import StatCard from './components/StatCard';
@@ -48,8 +49,6 @@ const App: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<CalculatedInventoryItem | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [showWelcome, setShowWelcome] = useState(false);
-  
-  const [isCloud, setIsCloud] = useState(false);
   const [copied, setCopied] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,13 +58,15 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const cloud = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-    setIsCloud(cloud);
-    
     if (cloud && !localStorage.getItem('welcomed')) {
       setShowWelcome(true);
       localStorage.setItem('welcomed', 'true');
     }
+    loadData();
+  }, []);
 
+  const loadData = () => {
+    setLoading(true);
     const stored = localStorage.getItem('customInventory');
     if (stored) {
       try {
@@ -78,7 +79,14 @@ const App: React.FC = () => {
       setItems(calculateInventoryMetrics(MOCK_DATA));
     }
     setLoading(false);
-  }, []);
+  };
+
+  const resetData = () => {
+    if (confirm("¿Estás seguro de eliminar los datos cargados y volver al ejemplo?")) {
+      localStorage.removeItem('customInventory');
+      loadData();
+    }
+  };
 
   const copyUrl = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -96,10 +104,9 @@ const App: React.FC = () => {
         if (parsed.length > 0) {
           localStorage.setItem('customInventory', JSON.stringify(parsed));
           setItems(calculateInventoryMetrics(parsed));
-          alert("Inventario cargado con éxito");
         }
       } catch (err) {
-        alert("Error al procesar el archivo Excel. Asegúrate de que las columnas coincidan.");
+        alert("Error al procesar el archivo Excel.");
       } finally {
         setLoading(false);
       }
@@ -175,6 +182,15 @@ const App: React.FC = () => {
     }
   };
 
+  const salesData = useMemo(() => {
+    if (!selectedItem) return [];
+    const months = ['Mes 1', 'Mes 2', 'Mes 3', 'Mes 4', 'Mes 5', 'Mes 6'];
+    return selectedItem.monthlySales.map((val, idx) => ({
+      name: months[idx],
+      ventas: val
+    }));
+  }, [selectedItem]);
+
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50">
       {showWelcome && (
@@ -215,11 +231,18 @@ const App: React.FC = () => {
           <button onClick={() => { setActiveTab('strategy'); handleAnalize(); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl font-bold transition-all ${activeTab === 'strategy' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-900'}`}>
             <Zap size={20} /> Estrategia IA
           </button>
-          <div className="pt-6 px-4">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Gestión de Datos</p>
+          
+          <div className="pt-6 px-4 space-y-4">
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Gestión de Datos</p>
             <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => e.target.files && processFile(e.target.files[0])} />
-            <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-4 px-4 py-4 rounded-2xl font-bold text-slate-400 hover:bg-slate-900 transition-all border border-slate-800">
-              <Upload size={20} /> Cargar Excel
+            <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-slate-400 hover:bg-slate-900 transition-all border border-slate-800 text-sm">
+              <Upload size={18} /> Cargar Excel
+            </button>
+            <button onClick={downloadTemplate} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-slate-400 hover:bg-slate-900 transition-all border border-slate-800 text-sm">
+              <FileDown size={18} /> Bajar Plantilla
+            </button>
+            <button onClick={resetData} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-rose-400/70 hover:bg-rose-950/30 transition-all border border-rose-900/20 text-sm">
+              <Trash2 size={18} /> Reiniciar Todo
             </button>
           </div>
         </nav>
@@ -370,13 +393,14 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-4">
                        <div className="bg-indigo-600 p-4 rounded-3xl text-white shadow-lg"><ClipboardList size={24} /></div>
                        <div>
-                          <h2 className="text-2xl font-black text-slate-900">IA Strategic Report</h2>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gemini Analysis Active</p>
+                          <h2 className="text-2xl font-black text-slate-900">Reporte Estratégico IA</h2>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Análisis Gemini Activo</p>
                        </div>
                     </div>
                     <button 
                       onClick={handleAnalize}
-                      className="w-full sm:w-auto bg-slate-950 hover:bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg transition-all flex items-center justify-center gap-3"
+                      disabled={loading}
+                      className="w-full sm:w-auto bg-slate-950 hover:bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg transition-all flex items-center justify-center gap-3 disabled:opacity-50"
                     >
                        <RefreshCw size={20} className={loading ? 'animate-spin' : ''} /> Refrescar Análisis
                     </button>
@@ -388,7 +412,7 @@ const App: React.FC = () => {
                        <p className="text-slate-400 font-bold tracking-widest uppercase text-xs animate-pulse">Analizando comportamientos PDR...</p>
                     </div>
                  ) : aiStrategy ? (
-                    <div className="bg-slate-50 p-8 rounded-[2rem] text-slate-700 whitespace-pre-line leading-relaxed italic border border-slate-100 shadow-inner text-lg font-medium">
+                    <div className="bg-slate-50 p-8 rounded-[2rem] text-slate-700 whitespace-pre-line leading-relaxed italic border border-slate-100 shadow-inner text-lg font-medium prose prose-slate max-w-none">
                        {aiStrategy}
                     </div>
                  ) : (
@@ -400,60 +424,77 @@ const App: React.FC = () => {
            </div>
         )}
 
-        {/* Detalle SKU Modal */}
         {selectedItem && (
           <div className="fixed inset-0 z-[100] flex justify-center items-center p-4 lg:p-12">
              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setSelectedItem(null)} />
-             <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
-                <button onClick={() => setSelectedItem(null)} className="absolute top-8 right-8 p-3 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors text-slate-500"><X size={20}/></button>
-                <div className="p-10 lg:p-14 overflow-y-auto">
-                   <div className="mb-10">
+             <div className="bg-white w-full max-w-3xl rounded-[3rem] shadow-2xl relative overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-200">
+                <button onClick={() => setSelectedItem(null)} className="absolute top-8 right-8 p-3 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors text-slate-500 z-20"><X size={20}/></button>
+                <div className="p-8 lg:p-12 overflow-y-auto">
+                   <div className="mb-8">
                       <span className="bg-indigo-50 text-indigo-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-4 inline-block">{selectedItem.category}</span>
                       <h2 className="text-3xl font-black text-slate-900 mb-2 leading-tight">{selectedItem.name}</h2>
                       <p className="text-slate-400 font-bold tracking-widest uppercase text-sm">{selectedItem.id}</p>
                    </div>
                    
-                   <div className="bg-indigo-900 text-white p-8 rounded-[2rem] mb-8 relative overflow-hidden">
-                      <div className="relative z-10">
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                           <Info size={14} className="text-indigo-400" /> Desglose Metodológico P.D.R
-                        </h4>
-                        <div className="grid grid-cols-3 gap-4">
-                           <div className="text-center">
-                              <span className="text-2xl font-black block">{Math.ceil(selectedItem.puntoPedido)}</span>
-                              <span className="text-[9px] font-bold uppercase opacity-60">P (Pedido)</span>
-                           </div>
-                           <div className="text-center border-x border-white/10">
-                              <span className="text-2xl font-black block">{Math.ceil(selectedItem.demandaMensual)}</span>
-                              <span className="text-[9px] font-bold uppercase opacity-60">D (Demanda)</span>
-                           </div>
-                           <div className="text-center">
-                              <span className="text-2xl font-black block">{Math.ceil(selectedItem.reservaSeguridad)}</span>
-                              <span className="text-[9px] font-bold uppercase opacity-60">R (Reserva)</span>
-                           </div>
+                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                      <div className="bg-indigo-950 text-white p-8 rounded-[2rem] relative overflow-hidden">
+                        <div className="relative z-10">
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                             <Info size={14} className="text-indigo-400" /> Métricas P.D.R
+                          </h4>
+                          <div className="grid grid-cols-3 gap-2">
+                             <div className="text-center">
+                                <span className="text-2xl font-black block">{Math.ceil(selectedItem.puntoPedido)}</span>
+                                <span className="text-[9px] font-bold uppercase opacity-60">P (Pedido)</span>
+                             </div>
+                             <div className="text-center border-x border-white/10">
+                                <span className="text-2xl font-black block">{Math.ceil(selectedItem.demandaMensual)}</span>
+                                <span className="text-[9px] font-bold uppercase opacity-60">D (Demanda)</span>
+                             </div>
+                             <div className="text-center">
+                                <span className="text-2xl font-black block">{Math.ceil(selectedItem.reservaSeguridad)}</span>
+                                <span className="text-[9px] font-bold uppercase opacity-60">R (Reserva)</span>
+                             </div>
+                          </div>
                         </div>
+                        <div className="absolute -bottom-4 -right-4 text-white opacity-5 rotate-12"><Activity size={120}/></div>
                       </div>
-                      <div className="absolute -bottom-4 -right-4 text-white opacity-5 rotate-12"><Activity size={120}/></div>
+
+                      <div className="bg-white border border-slate-100 p-8 rounded-[2rem] shadow-sm">
+                         <h4 className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2 text-slate-400">
+                             <TrendingUp size={14} className="text-indigo-500" /> Tendencia de Ventas (6m)
+                         </h4>
+                         <div className="h-24 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                               <LineChart data={salesData}>
+                                  <Tooltip contentStyle={{borderRadius: '12px', border: 'none', fontSize: '10px'}} />
+                                  <Line type="monotone" dataKey="ventas" stroke="#6366f1" strokeWidth={4} dot={false} />
+                               </LineChart>
+                            </ResponsiveContainer>
+                         </div>
+                      </div>
                    </div>
 
-                   <div className="grid grid-cols-2 gap-6 mb-10">
+                   <div className="grid grid-cols-2 gap-6 mb-8">
                       <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Priority Score</span>
                          <span className="text-4xl font-black text-indigo-600">{selectedItem.priorityScore}</span>
                       </div>
                       <div className={`p-6 rounded-3xl text-white shadow-xl ${selectedItem.priority === PriorityLevel.CRITICAL ? 'bg-rose-500' : selectedItem.priority === PriorityLevel.WARNING ? 'bg-amber-500' : 'bg-emerald-500'}`}>
                          <span className="text-[10px] font-black uppercase tracking-widest block mb-2 opacity-80">Health Check</span>
-                         <span className="text-xl font-black">{selectedItem.priority === PriorityLevel.CRITICAL ? 'COMPRAR AHORA' : selectedItem.priority === PriorityLevel.WARNING ? 'VIGILANCIA' : 'NIVEL ÓPTIMO'}</span>
+                         <span className="text-xl font-black">{selectedItem.priority === PriorityLevel.CRITICAL ? 'COMPRAR YA' : selectedItem.priority === PriorityLevel.WARNING ? 'REVISIÓN' : 'ESTABLE'}</span>
                       </div>
                    </div>
 
                    <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
-                      <h4 className="font-black text-slate-900 mb-6 flex items-center gap-2"><Monitor size={16}/> Métricas Operativas</h4>
-                      <div className="space-y-4 text-sm font-bold">
-                         <div className="flex justify-between border-b border-slate-200 pb-3"><span className="text-slate-500">Stock Actual</span><span className="text-slate-900">{selectedItem.currentStock}</span></div>
-                         <div className="flex justify-between border-b border-slate-200 pb-3"><span className="text-slate-500">Stock Objetivo</span><span className="text-indigo-600">{selectedItem.stockObjetivo}</span></div>
-                         <div className="flex justify-between border-b border-slate-200 pb-3"><span className="text-slate-500">Criticidad SKU</span><span className="text-slate-900">Nivel {selectedItem.criticality}</span></div>
-                         <div className="flex justify-between pb-1"><span className="text-slate-500">Antigüedad Stock</span><span className="text-slate-900">{selectedItem.agingDays} días</span></div>
+                      <h4 className="font-black text-slate-900 mb-6 flex items-center gap-2"><Monitor size={16}/> Datos Operativos</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4 text-sm font-bold">
+                         <div className="flex justify-between border-b border-slate-200 pb-3"><span className="text-slate-500 font-medium">Stock Actual</span><span className="text-slate-900">{selectedItem.currentStock}</span></div>
+                         <div className="flex justify-between border-b border-slate-200 pb-3"><span className="text-slate-500 font-medium">Stock Objetivo</span><span className="text-indigo-600">{selectedItem.stockObjetivo}</span></div>
+                         <div className="flex justify-between border-b border-slate-200 pb-3"><span className="text-slate-500 font-medium">Criticidad</span><span className="text-slate-900">Clase {selectedItem.criticality}</span></div>
+                         <div className="flex justify-between border-b border-slate-200 pb-3"><span className="text-slate-500 font-medium">Aging</span><span className="text-slate-900">{selectedItem.agingDays} días</span></div>
+                         <div className="flex justify-between border-b border-slate-200 pb-3"><span className="text-slate-500 font-medium">Últ. Compra</span><span className="text-slate-900">{selectedItem.lastPurchaseDate}</span></div>
+                         <div className="flex justify-between border-b border-slate-200 pb-3"><span className="text-slate-500 font-medium">Gap de Stock</span><span className={selectedItem.gap > 0 ? "text-rose-500" : "text-emerald-500"}>{selectedItem.gap} un.</span></div>
                       </div>
                    </div>
                 </div>

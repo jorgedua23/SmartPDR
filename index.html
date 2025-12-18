@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -27,42 +28,84 @@
             -webkit-tap-highlight-color: transparent;
             background-color: #f8fafc;
             color: #0f172a;
+            margin: 0;
             overflow-x: hidden;
         }
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+            z-index: 9999;
+            transition: opacity 0.4s ease-out;
         }
-        ::-webkit-scrollbar-track {
-            background: transparent;
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #e2e8f0;
+            border-top: 5px solid #4f46e5;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
-        input, select {
-            font-size: 16px !important;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 <script type="importmap">
 {
   "imports": {
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "@google/genai": "https://esm.sh/@google/genai@1.34.0",
+    "recharts": "https://esm.sh/recharts@3.6.0",
+    "lucide-react": "https://esm.sh/lucide-react@0.475.0",
+    "xlsx": "https://esm.sh/xlsx@0.18.5",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "recharts": "https://esm.sh/recharts@^3.6.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
-    "xlsx": "https://esm.sh/xlsx@0.18.5"
+    "react/": "https://esm.sh/react@^19.2.3/"
   }
 }
 </script>
 </head>
 <body class="antialiased">
+    <!-- Pantalla de carga inicial -->
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <p style="margin-top: 24px; font-weight: 900; color: #4f46e5; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase;">Iniciando SmartPDR...</p>
+    </div>
+
     <div id="root"></div>
-    <script type="module" src="index.tsx"></script>
+
+    <!-- Script de inicialización -->
+    <script type="module">
+        import './index.tsx';
+        
+        // Ocultar pantalla de carga una vez que React tome el control
+        window.addEventListener('DOMContentLoaded', () => {
+            const checkReact = setInterval(() => {
+                if (document.querySelector('#root').children.length > 0) {
+                    const loader = document.getElementById('loading-screen');
+                    if (loader) {
+                        loader.style.opacity = '0';
+                        setTimeout(() => loader.remove(), 400);
+                    }
+                    clearInterval(checkReact);
+                }
+            }, 100);
+            
+            // Timeout de seguridad por si falla la carga
+            setTimeout(() => {
+                const loader = document.getElementById('loading-screen');
+                if (loader) {
+                    const text = loader.querySelector('p');
+                    if (text) text.innerText = "Error al cargar. Intenta recargar la página.";
+                }
+            }, 8000);
+        });
+    </script>
 </body>
 </html>
