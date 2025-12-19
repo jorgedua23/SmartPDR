@@ -12,6 +12,7 @@ import { MOCK_DATA } from './constants.ts';
 import { calculateInventoryMetrics, parseExcelInventory } from './services/inventoryService.ts';
 import { getActionStrategy } from './services/geminiService.ts';
 import { CalculatedInventoryItem, PriorityLevel } from './types.ts';
+import StatCard from './components/StatCard.tsx';
 
 const App: React.FC = () => {
   const [items, setItems] = useState<CalculatedInventoryItem[]>([]);
@@ -110,10 +111,10 @@ const App: React.FC = () => {
           {activeTab === 'dashboard' && (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard title="Estado Crítico" value={stats.critical} icon={<AlertTriangle/>} color="rose" />
-                <StatCard title="Nivel de Alerta" value={stats.warning} icon={<Info/>} color="amber" />
-                <StatCard title="Stock Óptimo" value={stats.healthy} icon={<CheckCircle/>} color="emerald" />
-                <StatCard title="Total Unidades" value={stats.totalStockValue} icon={<Package/>} color="indigo" />
+                <StatCard title="Estado Crítico" value={stats.critical} icon={<AlertTriangle/>} colorClass="bg-rose-50 text-rose-600" />
+                <StatCard title="Nivel de Alerta" value={stats.warning} icon={<Info/>} colorClass="bg-amber-50 text-amber-600" />
+                <StatCard title="Stock Óptimo" value={stats.healthy} icon={<CheckCircle/>} colorClass="bg-emerald-50 text-emerald-600" />
+                <StatCard title="Total Unidades" value={stats.totalStockValue} icon={<Package/>} colorClass="bg-indigo-50 text-indigo-600" />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -140,7 +141,7 @@ const App: React.FC = () => {
                    <Zap className="absolute -top-10 -right-10 w-48 h-48 opacity-10 rotate-12" />
                    <h3 className="text-xl font-bold mb-4">Análisis PDR</h3>
                    <p className="text-indigo-100 text-sm leading-relaxed mb-6">
-                     El sistema ha detectado que el {((stats.critical / items.length) * 100).toFixed(0)}% de sus referencias se encuentran por debajo del Punto de Pedido.
+                     El sistema ha detectado que el {items.length > 0 ? ((stats.critical / items.length) * 100).toFixed(0) : 0}% de sus referencias se encuentran por debajo del Punto de Pedido.
                    </p>
                    <button 
                     onClick={() => setActiveTab('ai')}
@@ -238,7 +239,6 @@ const App: React.FC = () => {
   );
 };
 
-// Sub-componentes
 const NavItem = ({ icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) => (
   <button 
     onClick={onClick}
@@ -250,25 +250,5 @@ const NavItem = ({ icon, label, active, onClick }: { icon: any, label: string, a
     <span className="hidden lg:block text-sm">{label}</span>
   </button>
 );
-
-const StatCard = ({ title, value, icon, color }: { title: string, value: any, icon: any, color: string }) => {
-  const colors: Record<string, string> = {
-    rose: 'bg-rose-50 text-rose-600',
-    amber: 'bg-amber-50 text-amber-600',
-    emerald: 'bg-emerald-50 text-emerald-600',
-    indigo: 'bg-indigo-50 text-indigo-600'
-  };
-  return (
-    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-6 hover:shadow-md transition-shadow">
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${colors[color]}`}>
-        {icon}
-      </div>
-      <div>
-        <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">{title}</p>
-        <p className="text-3xl font-black text-slate-900 leading-none tracking-tighter">{value}</p>
-      </div>
-    </div>
-  );
-};
 
 export default App;

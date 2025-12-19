@@ -37,13 +37,20 @@
     </style>
 
     <script>
+        // Configuración para el shim antes de cargarlo
+        window.esmsOptions = { 
+            shimMode: true,
+            handleFetch: (url, options) => {
+                return fetch(url, options);
+            }
+        };
         window.process = { env: { API_KEY: "" } };
     </script>
 
-    <!-- Cargamos el shim primero -->
+    <!-- Cargamos el shim -->
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.10.1/dist/es-module-shims.js"></script>
 
-    <!-- Usamos type="importmap-shim" para que el shim tome el control total del fetch -->
+    <!-- ÚNICO importmap-shim necesario -->
     <script type="importmap-shim">
     {
       "imports": {
@@ -63,10 +70,10 @@
     "react": "https://esm.sh/react@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "xlsx": "https://esm.sh/xlsx@^0.18.5",
     "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "xlsx": "https://esm.sh/xlsx@^0.18.5"
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0"
   }
 }
 </script>
@@ -81,11 +88,11 @@
 
     <div id="root"></div>
 
-    <!-- El script debe ser type="module-shim" para que el shim pueda interceptar el fetch de index.tsx -->
+    <!-- Script de entrada principal -->
     <script type="module-shim">
         import './index.tsx';
 
-        // Manejador de visibilidad del loader
+        // Monitor de montaje de la app
         let checkApp = setInterval(() => {
             const root = document.getElementById('root');
             if (root && root.innerHTML !== "") {
@@ -100,15 +107,18 @@
     </script>
 
     <script>
-        // Captura de errores global fuera del shim para asegurar reporte
-        window.onerror = function(msg, url, line) {
+        // Captura de errores mejorada
+        window.onerror = function(msg, url, line, col, error) {
+            console.error("Error capturado:", {msg, url, line, error});
             const content = document.getElementById('loader-content');
             if (content) {
                 content.innerHTML = `
                     <div class="error-overlay">
-                        <h2 style="color: #ef4444; font-weight: 800; font-size: 18px; margin-bottom: 8px;">Error de Carga</h2>
-                        <p style="color: #64748b; font-size: 13px; margin-bottom: 20px;">${msg}</p>
-                        <button onclick="location.reload()" style="background: #4f46e5; color: white; padding: 10px 20px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer;">Reintentar</button>
+                        <h2 style="color: #ef4444; font-weight: 800; font-size: 18px; margin-bottom: 8px;">Error de Ejecución</h2>
+                        <p style="color: #64748b; font-size: 13px; margin-bottom: 20px;">
+                            ${msg === "Script error." ? "Error de seguridad o MIME Type. Por favor, limpia la caché y recarga." : msg}
+                        </p>
+                        <button onclick="location.reload()" style="background: #4f46e5; color: white; padding: 10px 20px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer;">Recargar Aplicación</button>
                     </div>`;
             }
             return false;
