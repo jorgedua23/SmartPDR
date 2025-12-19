@@ -4,15 +4,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Smart PDR - Dashboard</title>
+    <title>SmartPDR | Intelligent Inventory</title>
     
+    <!-- Estilos de carga crítica -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; margin: 0; overflow-x: hidden; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; margin: 0; -webkit-font-smoothing: antialiased; }
         #loading-screen {
             position: fixed;
             inset: 0;
@@ -25,23 +26,23 @@
             transition: opacity 0.5s ease;
         }
         .spinner {
-            width: 40px;
-            height: 40px;
+            width: 48px;
+            height: 48px;
             border: 4px solid #f1f5f9;
             border-top: 4px solid #4f46e5;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            animation: spin 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .error-box { padding: 30px; color: #ef4444; text-align: center; max-width: 400px; font-family: sans-serif; }
-        .error-box b { display: block; margin-bottom: 10px; font-size: 18px; color: #1e293b; }
-        .error-details { font-size: 12px; color: #64748b; background: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 15px; text-align: left; overflow-wrap: break-word; }
+        .error-overlay { padding: 40px; text-align: center; max-width: 480px; }
     </style>
 
     <script>
+        // Entorno global
         window.process = { env: { API_KEY: "" } };
     </script>
 
+    <!-- Shim para compatibilidad universal de Módulos e ImportMaps (Fix para Safari) -->
     <script async src="https://ga.jspm.io/npm:es-module-shims@1.10.1/dist/es-module-shims.js"></script>
 
     <script type="importmap">
@@ -62,48 +63,39 @@
 </head>
 <body>
     <div id="loading-screen">
-        <div id="status-container" style="display: flex; flex-direction: column; align-items: center;">
+        <div id="loader-content">
             <div class="spinner"></div>
-            <p style="margin-top: 20px; color: #64748b; font-weight: 600; font-size: 14px;">Iniciando SmartPDR...</p>
+            <p style="margin-top: 24px; color: #1e293b; font-weight: 700; font-size: 15px; letter-spacing: -0.02em;">Iniciando SmartPDR Engine...</p>
         </div>
     </div>
 
     <div id="root"></div>
 
     <script type="module">
-        const container = document.getElementById('status-container');
+        const loader = document.getElementById('loading-screen');
+        const content = document.getElementById('loader-content');
         
-        window.onerror = function(msg, url, line, col, error) {
-            console.error("Fallo detectado:", msg, "en", url);
-            container.innerHTML = `
-                <div class="error-box">
-                    <b>Fallo al cargar la aplicación</b>
-                    <p style="font-size: 14px;">Safari ha detectado un error técnico en los archivos del sistema.</p>
-                    <div class="error-details">
-                        ${msg}<br>
-                        <small>${url}:${line}</small>
-                    </div>
-                    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 24px; background: #4f46e5; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">Reintentar carga</button>
+        window.onerror = function(msg, url, line) {
+            content.innerHTML = `
+                <div class="error-overlay">
+                    <h2 style="color: #ef4444; font-weight: 800; font-size: 20px; margin-bottom: 12px;">Error de Inicialización</h2>
+                    <p style="color: #64748b; font-size: 14px; line-height: 1.5;">${msg}</p>
+                    <button onclick="location.reload()" style="margin-top: 24px; background: #4f46e5; color: white; padding: 12px 24px; border: none; border-radius: 12px; font-weight: 600; cursor: pointer;">Reintentar Carga</button>
                 </div>`;
             return false;
         };
 
-        // Importación con captura de errores específica para módulos
         import('./index.tsx').catch(err => {
-            console.error("Error en la importación de módulos:", err);
-            window.onerror("Error de Importación: " + err.message, "index.tsx", 0);
+            window.onerror("Error cargando componentes: " + err.message);
         });
-        
-        // Verificador de montaje
-        let checkInterval = setInterval(() => {
+
+        // Ocultar loader cuando React tome el control
+        let checkApp = setInterval(() => {
             const root = document.getElementById('root');
-            if (root && root.children.length > 0) {
-                const loader = document.getElementById('loading-screen');
-                if (loader) {
-                    loader.style.opacity = '0';
-                    setTimeout(() => { loader.style.display = 'none'; }, 500);
-                }
-                clearInterval(checkInterval);
+            if (root && root.innerHTML !== "") {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.style.display = 'none', 500);
+                clearInterval(checkApp);
             }
         }, 100);
     </script>

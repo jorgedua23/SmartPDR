@@ -1,208 +1,272 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line
-} from 'recharts';
-import { 
-  LayoutDashboard, Package, RefreshCw, FileDown, Trash2, Cpu, Upload, Search, 
-  CheckCircle2, Database, ShieldAlert, X, Target, Zap, Activity, ArrowUpDown, 
-  Copy, Check, AlertCircle, Globe, Monitor, Filter, Info, ClipboardList, TrendingUp
+  LayoutDashboard, Package, TrendingUp, Zap, FileText, 
+  Search, Upload, Info, AlertTriangle, CheckCircle, ArrowRight
 } from 'lucide-react';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
+} from 'recharts';
 
 import { MOCK_DATA } from './constants.ts';
-import { calculateInventoryMetrics, parseExcelInventory, downloadTemplate } from './services/inventoryService.ts';
+import { calculateInventoryMetrics, parseExcelInventory } from './services/inventoryService.ts';
 import { getActionStrategy } from './services/geminiService.ts';
 import { CalculatedInventoryItem, PriorityLevel } from './types.ts';
-import StatCard from './components/StatCard.tsx';
 
 const App: React.FC = () => {
   const [items, setItems] = useState<CalculatedInventoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [aiStrategy, setAiStrategy] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'strategy'>('dashboard');
-  const [selectedItem, setSelectedItem] = useState<CalculatedInventoryItem | null>(null);
-  const [sortConfig, setSortConfig] = useState<{key: any, direction: 'asc'|'desc'} | null>(null);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'ai'>('dashboard');
+  const [aiReport, setAiReport] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('All');
-  const [filterPriority, setFilterPriority] = useState('All');
+  const [loadingAi, setLoadingAi] = useState(false);
 
   useEffect(() => {
-    loadData();
+    const stored = localStorage.getItem('smart_pdr_v2');
+    const initial = stored ? JSON.parse(stored) : MOCK_DATA;
+    setItems(calculateInventoryMetrics(initial));
   }, []);
 
-  const loadData = () => {
-    setLoading(true);
-    const stored = localStorage.getItem('customInventory');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setItems(calculateInventoryMetrics(parsed.length > 0 ? parsed : MOCK_DATA));
-      } catch (e) {
-        setItems(calculateInventoryMetrics(MOCK_DATA));
-      }
-    } else {
-      setItems(calculateInventoryMetrics(MOCK_DATA));
-    }
-    setLoading(false);
-  };
-
-  const processFile = (file: File) => {
-    setLoading(true);
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const arrayBuffer = e.target?.result as ArrayBuffer;
-      try {
-        const parsed = parseExcelInventory(arrayBuffer);
-        if (parsed.length > 0) {
-          localStorage.setItem('customInventory', JSON.stringify(parsed));
-          setItems(calculateInventoryMetrics(parsed));
-        }
-      } catch (err) {
-        alert("Error al procesar Excel");
-      } finally {
-        setLoading(false);
+    reader.onload = (ev) => {
+      const data = parseExcelInventory(ev.target?.result as ArrayBuffer);
+      if (data.length > 0) {
+        setItems(calculateInventoryMetrics(data));
+        localStorage.setItem('smart_pdr_v2', JSON.stringify(data));
       }
     };
     reader.readAsArrayBuffer(file);
   };
 
-  const filteredItems = useMemo(() => {
-    return items.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCategory = filterCategory === 'All' || item.category === filterCategory;
-      const matchesPriority = filterPriority === 'All' || item.priority === filterPriority;
-      return matchesSearch && matchesCategory && matchesPriority;
-    });
-  }, [items, searchTerm, filterCategory, filterPriority]);
+  const generateAiReport = async () => {
+    setLoadingAi(true);
+    const report = await getActionStrategy(items);
+    setAiReport(report);
+    setLoadingAi(false);
+  };
 
-  const dashboardData = useMemo(() => [
-    { name: 'Críticos', value: items.filter(i => i.priority === PriorityLevel.CRITICAL).length, fill: '#ef4444' },
-    { name: 'Alertas', value: items.filter(i => i.priority === PriorityLevel.WARNING).length, fill: '#f59e0b' },
-    { name: 'Sanos', value: items.filter(i => i.priority === PriorityLevel.HEALTHY).length, fill: '#10b981' }
-  ], [items]);
+  const stats = useMemo(() => ({
+    critical: items.filter(i => i.priority === PriorityLevel.CRITICAL).length,
+    warning: items.filter(i => i.priority === PriorityLevel.WARNING).length,
+    healthy: items.filter(i => i.priority === PriorityLevel.HEALTHY).length,
+    totalStockValue: items.reduce((acc, i) => acc + i.currentStock, 0)
+  }), [items]);
+
+  const chartData = [
+    { name: 'Críticos', value: stats.critical, color: '#ef4444' },
+    { name: 'Alertas', value: stats.warning, color: '#f59e0b' },
+    { name: 'Óptimos', value: stats.healthy, color: '#10b981' }
+  ];
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 text-slate-900">
-      {/* Sidebar Simple para garantizar que cargue */}
-      <aside className="w-full lg:w-64 bg-slate-900 text-white p-6 flex flex-col gap-4">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="bg-indigo-600 p-2 rounded-lg"><Cpu size={20}/></div>
-          <span className="font-black text-xl tracking-tighter">SMART<span className="text-indigo-400">PDR</span></span>
-        </div>
-        <nav className="space-y-2">
-          <button onClick={() => setActiveTab('dashboard')} className={`w-full text-left px-4 py-3 rounded-xl font-bold ${activeTab === 'dashboard' ? 'bg-indigo-600' : 'hover:bg-slate-800'}`}>Dashboard</button>
-          <button onClick={() => setActiveTab('inventory')} className={`w-full text-left px-4 py-3 rounded-xl font-bold ${activeTab === 'inventory' ? 'bg-indigo-600' : 'hover:bg-slate-800'}`}>Inventario</button>
-          <button onClick={() => { setActiveTab('strategy'); getActionStrategy(items).then(setAiStrategy); }} className={`w-full text-left px-4 py-3 rounded-xl font-bold ${activeTab === 'strategy' ? 'bg-indigo-600' : 'hover:bg-slate-800'}`}>IA Estrategia</button>
-        </nav>
-        <div className="mt-auto pt-6 border-t border-slate-800 flex flex-col gap-2">
-           <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => e.target.files && processFile(e.target.files[0])} />
-           <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white"><Upload size={14}/> Subir Excel</button>
-           <button onClick={downloadTemplate} className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white"><FileDown size={14}/> Bajar Plantilla</button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 p-6 lg:p-10 overflow-y-auto">
-        {activeTab === 'dashboard' && (
-          <div className="space-y-8 animate-in fade-in duration-500">
-            <h1 className="text-4xl font-black">Resumen Operativo</h1>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-               <StatCard title="En Punto Pedido" value={items.filter(i => i.priority === PriorityLevel.CRITICAL).length} icon={<ShieldAlert/>} colorClass="bg-rose-50 text-rose-600" />
-               <StatCard title="En Alerta" value={items.filter(i => i.priority === PriorityLevel.WARNING).length} icon={<AlertCircle/>} colorClass="bg-amber-50 text-amber-600" />
-               <StatCard title="Stock Muerto" value={items.filter(i => i.agingDays > 120).length} icon={<Target/>} colorClass="bg-indigo-50 text-indigo-600" />
-            </div>
-            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 h-96">
-               <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dashboardData}>
-                     <XAxis dataKey="name" />
-                     <YAxis />
-                     <Tooltip />
-                     <Bar dataKey="value">
-                        {dashboardData.map((e, i) => <Cell key={i} fill={e.fill} />)}
-                     </Bar>
-                  </BarChart>
-               </ResponsiveContainer>
-            </div>
+    <div className="flex h-screen bg-slate-50 overflow-hidden">
+      {/* Sidebar Navigation */}
+      <nav className="w-20 lg:w-64 bg-slate-900 flex flex-col items-center lg:items-start p-4 lg:p-6 transition-all duration-300">
+        <div className="flex items-center gap-3 mb-12">
+          <div className="bg-indigo-500 p-2 rounded-xl text-white shadow-lg shadow-indigo-500/30">
+            <Zap size={24} fill="currentColor" />
           </div>
-        )}
+          <span className="hidden lg:block text-white font-black text-xl tracking-tight">Smart<span className="text-indigo-400">PDR</span></span>
+        </div>
+        
+        <div className="flex-1 w-full space-y-2">
+          <NavItem icon={<LayoutDashboard/>} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+          <NavItem icon={<Package/>} label="Inventario" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
+          <NavItem icon={<TrendingUp/>} label="Consultoría IA" active={activeTab === 'ai'} onClick={() => { setActiveTab('ai'); if (!aiReport) generateAiReport(); }} />
+        </div>
 
-        {activeTab === 'inventory' && (
-          <div className="space-y-6">
-            <div className="bg-white p-4 rounded-2xl flex gap-4">
+        <div className="mt-auto w-full pt-6 border-t border-slate-800">
+          <label className="flex items-center gap-2 cursor-pointer text-slate-400 hover:text-white transition-colors">
+            <Upload size={20} />
+            <span className="hidden lg:block text-sm font-bold">Cargar Excel</span>
+            <input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} />
+          </label>
+        </div>
+      </nav>
+
+      {/* Main Container */}
+      <main className="flex-1 overflow-y-auto relative bg-[#fcfdfe]">
+        
+        {/* Top Header */}
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex justify-between items-center">
+          <h1 className="text-xl font-bold text-slate-900 capitalize">{activeTab}</h1>
+          <div className="flex items-center gap-4">
+             <div className="hidden md:flex items-center bg-slate-100 rounded-full px-4 py-2 text-slate-500">
+               <Search size={16} className="mr-2" />
                <input 
-                type="text" placeholder="Buscar producto..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
-                className="flex-1 bg-slate-50 px-4 py-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                type="text" placeholder="Buscar SKU..." 
+                className="bg-transparent text-sm outline-none border-none w-48"
+                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                />
-            </div>
-            <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-               <table className="w-full text-left">
-                  <thead className="bg-slate-50">
-                    <tr>
-                       <th className="p-4 text-[10px] font-black uppercase text-slate-400">Producto</th>
-                       <th className="p-4 text-[10px] font-black uppercase text-slate-400 text-center">Stock</th>
-                       <th className="p-4 text-[10px] font-black uppercase text-slate-400 text-center">Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                     {filteredItems.map(item => (
-                       <tr key={item.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedItem(item)}>
-                          <td className="p-4 font-bold">{item.name}</td>
-                          <td className="p-4 text-center font-black">{item.currentStock}</td>
-                          <td className="p-4 text-center">
-                             <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
-                               item.priority === PriorityLevel.CRITICAL ? 'bg-rose-100 text-rose-600' :
-                               item.priority === PriorityLevel.WARNING ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
-                             }`}>
-                                {item.priority}
-                             </span>
-                          </td>
+             </div>
+             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500"></div>
+          </div>
+        </header>
+
+        <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
+          
+          {activeTab === 'dashboard' && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard title="Estado Crítico" value={stats.critical} icon={<AlertTriangle/>} color="rose" />
+                <StatCard title="Nivel de Alerta" value={stats.warning} icon={<Info/>} color="amber" />
+                <StatCard title="Stock Óptimo" value={stats.healthy} icon={<CheckCircle/>} color="emerald" />
+                <StatCard title="Total Unidades" value={stats.totalStockValue} icon={<Package/>} color="indigo" />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
+                  <h3 className="text-lg font-bold mb-6">Distribución de Salud de Inventario</h3>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
+                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                        <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                        <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={60}>
+                          {chartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-3xl p-8 text-white shadow-xl shadow-indigo-200 overflow-hidden relative">
+                   <Zap className="absolute -top-10 -right-10 w-48 h-48 opacity-10 rotate-12" />
+                   <h3 className="text-xl font-bold mb-4">Análisis PDR</h3>
+                   <p className="text-indigo-100 text-sm leading-relaxed mb-6">
+                     El sistema ha detectado que el {((stats.critical / items.length) * 100).toFixed(0)}% de sus referencias se encuentran por debajo del Punto de Pedido.
+                   </p>
+                   <button 
+                    onClick={() => setActiveTab('ai')}
+                    className="bg-white/10 hover:bg-white/20 backdrop-blur-sm px-6 py-3 rounded-xl flex items-center gap-2 font-bold transition-all"
+                   >
+                     Ver recomendaciones <ArrowRight size={18} />
+                   </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'inventory' && (
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left border-collapse">
+                   <thead>
+                     <tr className="bg-slate-50/50">
+                       <th className="px-6 py-4 text-xs font-black uppercase tracking-wider text-slate-400">SKU / Producto</th>
+                       <th className="px-6 py-4 text-xs font-black uppercase tracking-wider text-slate-400">Stock Actual</th>
+                       <th className="px-6 py-4 text-xs font-black uppercase tracking-wider text-slate-400">Punto Pedido</th>
+                       <th className="px-6 py-4 text-xs font-black uppercase tracking-wider text-slate-400">Estado PDR</th>
+                       <th className="px-6 py-4 text-xs font-black uppercase tracking-wider text-slate-400 text-right">Aging</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-100">
+                     {items.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => (
+                       <tr key={item.id} className="hover:bg-slate-50/80 transition-colors group">
+                         <td className="px-6 py-4">
+                           <div className="font-bold text-slate-900">{item.name}</div>
+                           <div className="text-xs text-slate-500 font-medium">{item.id} · {item.category}</div>
+                         </td>
+                         <td className="px-6 py-4 font-black text-slate-800">{item.currentStock}</td>
+                         <td className="px-6 py-4 font-medium text-slate-600">{item.puntoPedido}</td>
+                         <td className="px-6 py-4">
+                           <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tight ${
+                             item.priority === PriorityLevel.CRITICAL ? 'bg-rose-50 text-rose-600' : 
+                             item.priority === PriorityLevel.WARNING ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'
+                           }`}>
+                             {item.priority}
+                           </span>
+                         </td>
+                         <td className="px-6 py-4 text-right">
+                           <span className={`text-sm font-bold ${item.agingDays > 120 ? 'text-rose-500' : 'text-slate-500'}`}>
+                             {item.agingDays}d
+                           </span>
+                         </td>
                        </tr>
                      ))}
-                  </tbody>
-               </table>
+                   </tbody>
+                 </table>
+               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'strategy' && (
-          <div className="max-w-3xl mx-auto py-10">
-             <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm">
-                <h2 className="text-2xl font-black mb-6 flex items-center gap-3"><Zap className="text-indigo-600"/> Estrategia PDR (IA)</h2>
-                <div className="bg-slate-50 p-6 rounded-2xl text-slate-600 italic leading-relaxed">
-                   {aiStrategy || "Generando análisis..."}
-                </div>
-             </div>
-          </div>
-        )}
-      </main>
+          {activeTab === 'ai' && (
+            <div className="max-w-4xl mx-auto py-12">
+               <div className="bg-white rounded-[2.5rem] border border-slate-200 p-12 shadow-sm text-center">
+                  <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center mx-auto mb-8 text-indigo-600">
+                     <FileText size={40} />
+                  </div>
+                  <h2 className="text-3xl font-black mb-4 tracking-tight">Reporte Estratégico IA</h2>
+                  <p className="text-slate-500 mb-10 max-w-md mx-auto">
+                    Análisis táctico generado en tiempo real basado en su demanda actual y niveles de reserva de seguridad.
+                  </p>
+                  
+                  <div className="bg-slate-50 rounded-3xl p-8 text-left border border-slate-100 min-h-[200px] flex items-center justify-center">
+                     {loadingAi ? (
+                       <div className="flex flex-col items-center gap-4">
+                          <div className="spinner !w-8 !h-8 border-2"></div>
+                          <span className="text-sm font-bold text-slate-400 animate-pulse">Consultando a Gemini...</span>
+                       </div>
+                     ) : (
+                       <p className="text-slate-700 leading-relaxed font-medium whitespace-pre-line italic">
+                        "{aiReport || "Presione el botón para generar el informe táctico."}"
+                       </p>
+                     )}
+                  </div>
 
-      {/* Modal Detalle */}
-      {selectedItem && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-           <div className="bg-white w-full max-w-xl rounded-[2.5rem] p-10 relative animate-in zoom-in-95 duration-200">
-              <button onClick={() => setSelectedItem(null)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-900"><X/></button>
-              <span className="text-[10px] font-black text-indigo-600 uppercase mb-2 block">{selectedItem.category}</span>
-              <h2 className="text-3xl font-black mb-6">{selectedItem.name}</h2>
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                 <div className="bg-slate-50 p-4 rounded-2xl text-center">
-                    <span className="text-[10px] font-bold text-slate-400 block uppercase">Punto Pedido</span>
-                    <span className="text-xl font-black">{Math.ceil(selectedItem.puntoPedido)}</span>
-                 </div>
-                 <div className="bg-slate-50 p-4 rounded-2xl text-center">
-                    <span className="text-[10px] font-bold text-slate-400 block uppercase">Demanda</span>
-                    <span className="text-xl font-black">{Math.ceil(selectedItem.demandaMensual)}</span>
-                 </div>
-              </div>
-              <div className="space-y-3">
-                 <div className="flex justify-between border-b pb-2 text-sm"><span className="text-slate-500">Stock Actual</span><span className="font-bold">{selectedItem.currentStock}</span></div>
-                 <div className="flex justify-between border-b pb-2 text-sm"><span className="text-slate-500">Aging</span><span className="font-bold">{selectedItem.agingDays} días</span></div>
-                 <div className="flex justify-between border-b pb-2 text-sm"><span className="text-slate-500">Criticidad</span><span className="font-bold">Clase {selectedItem.criticality}</span></div>
-              </div>
-           </div>
+                  <button 
+                    onClick={generateAiReport}
+                    disabled={loadingAi}
+                    className="mt-10 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-black px-10 py-4 rounded-2xl transition-all flex items-center gap-3 mx-auto shadow-xl shadow-indigo-500/20"
+                  >
+                    {loadingAi ? 'Analizando...' : 'Refrescar Análisis IA'}
+                    <Zap size={20} fill="currentColor" />
+                  </button>
+               </div>
+            </div>
+          )}
+
         </div>
-      )}
+      </main>
+    </div>
+  );
+};
+
+// Sub-componentes
+const NavItem = ({ icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) => (
+  <button 
+    onClick={onClick}
+    className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold transition-all ${
+      active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-100'
+    }`}
+  >
+    <span className="flex-shrink-0">{icon}</span>
+    <span className="hidden lg:block text-sm">{label}</span>
+  </button>
+);
+
+const StatCard = ({ title, value, icon, color }: { title: string, value: any, icon: any, color: string }) => {
+  const colors: Record<string, string> = {
+    rose: 'bg-rose-50 text-rose-600',
+    amber: 'bg-amber-50 text-amber-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    indigo: 'bg-indigo-50 text-indigo-600'
+  };
+  return (
+    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-6 hover:shadow-md transition-shadow">
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${colors[color]}`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">{title}</p>
+        <p className="text-3xl font-black text-slate-900 leading-none tracking-tighter">{value}</p>
+      </div>
     </div>
   );
 };

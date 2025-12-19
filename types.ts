@@ -1,25 +1,25 @@
 
 export enum PriorityLevel {
-  CRITICAL = 'Critical',
-  WARNING = 'Warning',
-  HEALTHY = 'Healthy'
+  CRITICAL = 'Crítico',
+  WARNING = 'Alerta',
+  HEALTHY = 'Óptimo'
 }
 
 export interface InventoryItem {
   id: string;
   name: string;
   category: string;
-  monthlySales: number[]; // Últimos 6 meses
+  monthlySales: number[];
   currentStock: number;
   lastPurchaseDate: string;
   lastPurchaseQty: number;
-  criticality: 1 | 2 | 3;
+  criticality: 1 | 2 | 3; // 3 es más crítico
 }
 
 export interface CalculatedInventoryItem extends InventoryItem {
   demandaMensual: number;      // D
-  puntoPedido: number;         // P
   reservaSeguridad: number;    // R
+  puntoPedido: number;         // P
   stockObjetivo: number;
   gap: number;
   agingDays: number;
