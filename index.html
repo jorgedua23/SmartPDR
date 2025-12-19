@@ -37,20 +37,19 @@
     </style>
 
     <script>
-        // Configuración para el shim antes de cargarlo
+        // Forzamos el modo shim antes de cargar la librería
         window.esmsOptions = { 
             shimMode: true,
-            handleFetch: (url, options) => {
-                return fetch(url, options);
-            }
+            onPolyfill: () => console.log("Modulo Shim Activo"),
+            onError: (e) => console.error("Error en Shim:", e)
         };
         window.process = { env: { API_KEY: "" } };
     </script>
 
-    <!-- Cargamos el shim -->
-    <script async src="https://ga.jspm.io/npm:es-module-shims@1.10.1/dist/es-module-shims.js"></script>
+    <!-- Único script del shim con crossorigin -->
+    <script async src="https://ga.jspm.io/npm:es-module-shims@1.10.1/dist/es-module-shims.js" crossorigin="anonymous"></script>
 
-    <!-- ÚNICO importmap-shim necesario -->
+    <!-- ÚNICO importmap-shim permitido -->
     <script type="importmap-shim">
     {
       "imports": {
@@ -82,18 +81,18 @@
     <div id="loading-screen">
         <div id="loader-content">
             <div class="spinner"></div>
-            <p style="margin-top: 24px; color: #1e293b; font-weight: 700; font-size: 15px; letter-spacing: -0.02em;">Cargando SmartPDR...</p>
+            <p style="margin-top: 24px; color: #1e293b; font-weight: 700; font-size: 15px; letter-spacing: -0.02em;">Iniciando SmartPDR Engine...</p>
         </div>
     </div>
 
     <div id="root"></div>
 
-    <!-- Script de entrada principal -->
+    <!-- Punto de entrada único -->
     <script type="module-shim">
         import './index.tsx';
 
-        // Monitor de montaje de la app
-        let checkApp = setInterval(() => {
+        // Monitor de renderizado para ocultar el loader
+        const checkApp = setInterval(() => {
             const root = document.getElementById('root');
             if (root && root.innerHTML !== "") {
                 const loader = document.getElementById('loading-screen');
@@ -107,18 +106,20 @@
     </script>
 
     <script>
-        // Captura de errores mejorada
+        // Manejo de errores global
         window.onerror = function(msg, url, line, col, error) {
-            console.error("Error capturado:", {msg, url, line, error});
+            console.error("Error Global:", {msg, url, line, col, error});
             const content = document.getElementById('loader-content');
             if (content) {
+                let displayMsg = msg;
+                if (msg === "Script error.") {
+                    displayMsg = "Error de origen o MIME Type. Por favor, limpia la caché del navegador.";
+                }
                 content.innerHTML = `
                     <div class="error-overlay">
-                        <h2 style="color: #ef4444; font-weight: 800; font-size: 18px; margin-bottom: 8px;">Error de Ejecución</h2>
-                        <p style="color: #64748b; font-size: 13px; margin-bottom: 20px;">
-                            ${msg === "Script error." ? "Error de seguridad o MIME Type. Por favor, limpia la caché y recarga." : msg}
-                        </p>
-                        <button onclick="location.reload()" style="background: #4f46e5; color: white; padding: 10px 20px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer;">Recargar Aplicación</button>
+                        <h2 style="color: #ef4444; font-weight: 800; font-size: 18px; margin-bottom: 8px;">Error de Inicialización</h2>
+                        <p style="color: #64748b; font-size: 13px; margin-bottom: 20px;">${displayMsg}</p>
+                        <button onclick="location.reload()" style="background: #4f46e5; color: white; padding: 10px 20px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer;">Reintentar Carga</button>
                     </div>`;
             }
             return false;
