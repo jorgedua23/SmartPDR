@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   LayoutDashboard, Package, TrendingUp, Zap, FileText, 
   Search, Upload, Info, AlertTriangle, CheckCircle, ArrowRight
@@ -15,37 +14,57 @@ import { CalculatedInventoryItem, PriorityLevel } from './types.ts';
 import StatCard from './components/StatCard.tsx';
 
 const App: React.FC = () => {
-  const [items, setItems] = useState<CalculatedInventoryItem[]>([]);
+  // Inicializar directamente con MOCK_DATA calculado (sin localStorage)
+  const [items, setItems] = useState<CalculatedInventoryItem[]>(
+    calculateInventoryMetrics(MOCK_DATA)
+  );
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'ai'>('dashboard');
   const [aiReport, setAiReport] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loadingAi, setLoadingAi] = useState(false);
-
-  useEffect(() => {
-    const stored = localStorage.getItem('smart_pdr_v2');
-    const initial = stored ? JSON.parse(stored) : MOCK_DATA;
-    setItems(calculateInventoryMetrics(initial));
-  }, []);
+  const [fileError, setFileError] = useState<string>('');
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    setFileError('');
     const reader = new FileReader();
+    
     reader.onload = (ev) => {
-      const data = parseExcelInventory(ev.target?.result as ArrayBuffer);
-      if (data.length > 0) {
+      try {
+        const data = parseExcelInventory(ev.target?.result as ArrayBuffer);
+        if (data.length === 0) {
+          setFileError('El archivo no contiene datos válidos');
+          return;
+        }
         setItems(calculateInventoryMetrics(data));
-        localStorage.setItem('smart_pdr_v2', JSON.stringify(data));
+        alert(`✅ ${data.length} productos cargados exitosamente`);
+      } catch (error) {
+        setFileError('Error al procesar el archivo Excel');
+        console.error('Parse error:', error);
       }
     };
+    
+    reader.onerror = () => {
+      setFileError('Error al leer el archivo');
+    };
+    
     reader.readAsArrayBuffer(file);
   };
 
   const generateAiReport = async () => {
     setLoadingAi(true);
-    const report = await getActionStrategy(items);
-    setAiReport(report);
-    setLoadingAi(false);
+    setAiReport('');
+    try {
+      const report = await getActionStrategy(items);
+      setAiReport(report);
+    } catch (error) {
+      setAiReport('Error al generar el reporte. Verifica tu API Key.');
+      console.error('AI Report error:', error);
+    } finally {
+      setLoadingAi(false);
+    }
   };
 
   const stats = useMemo(() => ({
@@ -61,6 +80,14 @@ const App: React.FC = () => {
     { name: 'Óptimos', value: stats.healthy, color: '#10b981' }
   ];
 
+  const filteredItems = useMemo(() => 
+    items.filter(i => 
+      i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      i.id.toLowerCase().includes(searchTerm.toLowerCase())
+    ),
+    [items, searchTerm]
+  );
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* Sidebar Navigation */}
@@ -69,21 +96,53 @@ const App: React.FC = () => {
           <div className="bg-indigo-500 p-2 rounded-xl text-white shadow-lg shadow-indigo-500/30">
             <Zap size={24} fill="currentColor" />
           </div>
-          <span className="hidden lg:block text-white font-black text-xl tracking-tight">Smart<span className="text-indigo-400">PDR</span></span>
+          <span className="hidden lg:block text-white font-black text-xl tracking-tight">
+            Smart<span className="text-indigo-400">PDR</span>
+          </span>
         </div>
         
         <div className="flex-1 w-full space-y-2">
-          <NavItem icon={<LayoutDashboard/>} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          <NavItem icon={<Package/>} label="Inventario" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
-          <NavItem icon={<TrendingUp/>} label="Consultoría IA" active={activeTab === 'ai'} onClick={() => { setActiveTab('ai'); if (!aiReport) generateAiReport(); }} />
+          <NavItem 
+            icon={<LayoutDashboard/>} 
+            label="Dashboard" 
+            active={activeTab === 'dashboard'} 
+            onClick={() => setActiveTab('dashboard')} 
+          />
+          <NavItem 
+            icon={<Package/>} 
+            label="Inventario" 
+            active={activeTab === 'inventory'} 
+            onClick={() => setActiveTab('inventory')} 
+          />
+          <NavItem 
+            icon={<TrendingUp/>} 
+            label="Consultoría IA" 
+            active={activeTab === 'ai'} 
+            onClick={() => { 
+              setActiveTab('ai'); 
+              if (!aiReport && !loadingAi) generateAiReport(); 
+            }} 
+          />
         </div>
 
         <div className="mt-auto w-full pt-6 border-t border-slate-800">
-          <label className="flex items-center gap-2 cursor-pointer text-slate-400 hover:text-white transition-colors">
+          <label 
+            htmlFor="file-upload"
+            className="flex items-center gap-2 cursor-pointer text-slate-400 hover:text-white transition-colors"
+          >
             <Upload size={20} />
             <span className="hidden lg:block text-sm font-bold">Cargar Excel</span>
-            <input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleFileUpload} />
+            <input 
+              id="file-upload"
+              type="file" 
+              className="hidden" 
+              accept=".xlsx,.xls" 
+              onChange={handleFileUpload} 
+            />
           </label>
+          {fileError && (
+            <p className="text-xs text-red-400 mt-2 hidden lg:block">{fileError}</p>
+          )}
         </div>
       </nav>
 
@@ -97,9 +156,12 @@ const App: React.FC = () => {
              <div className="hidden md:flex items-center bg-slate-100 rounded-full px-4 py-2 text-slate-500">
                <Search size={16} className="mr-2" />
                <input 
-                type="text" placeholder="Buscar SKU..." 
+                type="text" 
+                placeholder="Buscar SKU..." 
+                aria-label="Buscar en inventario"
                 className="bg-transparent text-sm outline-none border-none w-48"
-                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)}
                />
              </div>
              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500"></div>
@@ -111,10 +173,30 @@ const App: React.FC = () => {
           {activeTab === 'dashboard' && (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard title="Estado Crítico" value={stats.critical} icon={<AlertTriangle/>} colorClass="bg-rose-50 text-rose-600" />
-                <StatCard title="Nivel de Alerta" value={stats.warning} icon={<Info/>} colorClass="bg-amber-50 text-amber-600" />
-                <StatCard title="Stock Óptimo" value={stats.healthy} icon={<CheckCircle/>} colorClass="bg-emerald-50 text-emerald-600" />
-                <StatCard title="Total Unidades" value={stats.totalStockValue} icon={<Package/>} colorClass="bg-indigo-50 text-indigo-600" />
+                <StatCard 
+                  title="Estado Crítico" 
+                  value={stats.critical} 
+                  icon={<AlertTriangle/>} 
+                  colorClass="bg-rose-50 text-rose-600" 
+                />
+                <StatCard 
+                  title="Nivel de Alerta" 
+                  value={stats.warning} 
+                  icon={<Info/>} 
+                  colorClass="bg-amber-50 text-amber-600" 
+                />
+                <StatCard 
+                  title="Stock Óptimo" 
+                  value={stats.healthy} 
+                  icon={<CheckCircle/>} 
+                  colorClass="bg-emerald-50 text-emerald-600" 
+                />
+                <StatCard 
+                  title="Total Unidades" 
+                  value={stats.totalStockValue} 
+                  icon={<Package/>} 
+                  colorClass="bg-indigo-50 text-indigo-600" 
+                />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -124,9 +206,26 @@ const App: React.FC = () => {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
-                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
-                        <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                        <XAxis 
+                          dataKey="name" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fill: '#64748b', fontSize: 12}} 
+                          dy={10} 
+                        />
+                        <YAxis 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fill: '#64748b', fontSize: 12}} 
+                        />
+                        <Tooltip 
+                          cursor={{fill: '#f8fafc'}} 
+                          contentStyle={{
+                            borderRadius: '16px', 
+                            border: 'none', 
+                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'
+                          }} 
+                        />
                         <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={60}>
                           {chartData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
@@ -168,29 +267,37 @@ const App: React.FC = () => {
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-slate-100">
-                     {items.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => (
-                       <tr key={item.id} className="hover:bg-slate-50/80 transition-colors group">
-                         <td className="px-6 py-4">
-                           <div className="font-bold text-slate-900">{item.name}</div>
-                           <div className="text-xs text-slate-500 font-medium">{item.id} · {item.category}</div>
-                         </td>
-                         <td className="px-6 py-4 font-black text-slate-800">{item.currentStock}</td>
-                         <td className="px-6 py-4 font-medium text-slate-600">{item.puntoPedido}</td>
-                         <td className="px-6 py-4">
-                           <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tight ${
-                             item.priority === PriorityLevel.CRITICAL ? 'bg-rose-50 text-rose-600' : 
-                             item.priority === PriorityLevel.WARNING ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'
-                           }`}>
-                             {item.priority}
-                           </span>
-                         </td>
-                         <td className="px-6 py-4 text-right">
-                           <span className={`text-sm font-bold ${item.agingDays > 120 ? 'text-rose-500' : 'text-slate-500'}`}>
-                             {item.agingDays}d
-                           </span>
+                     {filteredItems.length === 0 ? (
+                       <tr>
+                         <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
+                           No se encontraron productos
                          </td>
                        </tr>
-                     ))}
+                     ) : (
+                       filteredItems.map(item => (
+                         <tr key={item.id} className="hover:bg-slate-50/80 transition-colors group">
+                           <td className="px-6 py-4">
+                             <div className="font-bold text-slate-900">{item.name}</div>
+                             <div className="text-xs text-slate-500 font-medium">{item.id} · {item.category}</div>
+                           </td>
+                           <td className="px-6 py-4 font-black text-slate-800">{item.currentStock}</td>
+                           <td className="px-6 py-4 font-medium text-slate-600">{item.puntoPedido}</td>
+                           <td className="px-6 py-4">
+                             <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tight ${
+                               item.priority === PriorityLevel.CRITICAL ? 'bg-rose-50 text-rose-600' : 
+                               item.priority === PriorityLevel.WARNING ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'
+                             }`}>
+                               {item.priority}
+                             </span>
+                           </td>
+                           <td className="px-6 py-4 text-right">
+                             <span className={`text-sm font-bold ${item.agingDays > 120 ? 'text-rose-500' : 'text-slate-500'}`}>
+                               {item.agingDays}d
+                             </span>
+                           </td>
+                         </tr>
+                       ))
+                     )}
                    </tbody>
                  </table>
                </div>
@@ -215,8 +322,8 @@ const App: React.FC = () => {
                           <span className="text-sm font-bold text-slate-400 animate-pulse">Consultando a Gemini...</span>
                        </div>
                      ) : (
-                       <p className="text-slate-700 leading-relaxed font-medium whitespace-pre-line italic">
-                        "{aiReport || "Presione el botón para generar el informe táctico."}"
+                       <p className="text-slate-700 leading-relaxed font-medium whitespace-pre-line">
+                        {aiReport || "Presione el botón para generar el informe táctico."}
                        </p>
                      )}
                   </div>
@@ -239,11 +346,23 @@ const App: React.FC = () => {
   );
 };
 
-const NavItem = ({ icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) => (
+const NavItem = ({ 
+  icon, 
+  label, 
+  active, 
+  onClick 
+}: { 
+  icon: React.ReactNode; 
+  label: string; 
+  active: boolean; 
+  onClick: () => void;
+}) => (
   <button 
     onClick={onClick}
     className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold transition-all ${
-      active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-100'
+      active 
+        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' 
+        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-100'
     }`}
   >
     <span className="flex-shrink-0">{icon}</span>
